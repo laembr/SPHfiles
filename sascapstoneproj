@@ -1,0 +1,590 @@
+/*Capstone: Prevalence and predictors of tobacco use and problem drinking among firefighters*/
+LIBNAME A '/home/u45144537/Capstone Project';
+Libname B '/home/u45144537/Capstone Project/Capstone native';
+/*Purpose: Create a new dataset to define outcome and predictors*/
+data project_data_1;
+set A.survey_all; /*N=138*/
+if age=. then delete;
+data B.capstone_native;
+set A.survey_all;
+run;
+
+/*Purpose: Get overview of data*/
+proc print data=B.capstone_native (OBS=10);
+run;
+proc contents data=B.capstone_native;
+run;
+proc freq data=B.capstone_native;
+run;
+
+/*Outcome: Cigarettes*/
+Data B.capstone_native;
+Set A.survey_all; /*N=138*/
+If age=. then delete;
+If ever_smoked='No' OR smoked_100_cigs='No' then cigarette_use='Never';														/*2=Never*/
+Else if smoked_100_cigs='Yes' and smoke_current='No' then cigarette_use='Former';											/*1=Former*/
+Else if smoked_100_cigs='Yes' and (smoke_current="Some days" or smoke_current="Every day") then cigarette_use='Current';	/*3=Current*/
+Else if smoked_100_cigs="Not sure/don't know" then cigarette_use=.;
+/*Else cigarette_use=.;*/
+
+If age=. then delete;
+If cigarette_use='Never' then cigarette_use_en='Never';									/*Never*/
+Else if cigarette_use='Forme' or cigarette_use='Curre' then cigarette_use_en='Ever';	/*Ever*/
+/*Else cigarette_use_en=.; */
+
+/*Outcome:SLT*/;
+If smokeless_tobacco="Yes" then SLT_use=1;					/*1=Yes*/
+Else SLT_use=0;												/*.=other*/
+/*Have you ever used smokeless tobacco- no(103) and dont know(2) grouped. yes=31*/
+
+/*Outcome:heavy drinking*/
+If alcohol_numdrinks=. then alcohol_numdrinks_c=.;
+Else if alcohol_numdrinks<8 then alcohol_numdrinks_c=alcohol_numdrinks;
+Else if alcohol_numdrinks>7 then alcohol_numdrinks_c=.;
+/*Note:90th percentile (10 drinks) was cutoff to remove errors in numebr of drinks reported */
+If alcohol_average=. then alcohol_average_c=0;
+/*no way to determine if zero or missing, placing zero dfor alcohol consumption. */ 
+Else if alcohol_average<=10 then alcohol_average_c=alcohol_average;
+Else if alcohol_average>10 then alcohol_average_c=.;
+drinks_per_week=alcohol_numdrinks_c*alcohol_average_c;
+If drinks_per_week=. then heavy_drinking=.;
+Else if gender="Male" and drinks_per_week>=15 then heavy_drinking=1;
+Else if gender="Female" and drinks_per_week>=8 then heavy_drinking=1;
+Else If gender="Male" and drinks_per_week<15 then heavy_drinking=0;
+Else if gender="Female" and drinks_per_week<8 then heavy_drinking=0;
+
+/*SAMHSA definitions of alcohol cutoffs used in alcohol_average_c: Need to go back to FF drinking lit and check here. */
+
+/*Exposure: Number of years as a firefighter*/
+*TRFD ff years;
+if trfd_start_year ne . and trfd_end_year ne . then trfd_years=(trfd_end_year-trfd_start_year);
+else if trfd_start_year ne . and trfd_end_year = . then trfd_years=(2019-trfd_start_year);
+else if trfd_start_year = . then trfd_years=volunteer_ff_years;
+*VOLUNTEER ff years- whichever is greater (trfd or overall);
+volunteer_length= max(trfd_years, volunteer_ff_years); *volunteered elsewhere too? could have miss-recalled length?;
+*ff length for VOLUNTEER ff who were never career ff;
+If ever_career="No" then ff_years=volunteer_length;
+Else if ever_career="No" then career_ff_years=0;
+*CAREER ff for those who are active or former ff based on reported start and end year;
+If ever_career in ("Yes, I am currently a career firefighter" "Yes, I am a former career firefighter") then do;
+If career_start_year ne . and career_end_year ne . then career_years=(career_end_year-career_start_year);
+Else if career_start_year ne . and career_end_year = . then career_years=(2019-career_start_year);
+Else if career_start_year = . then career_years=career_ff_years;
+End;
+*CAREER ff years- whichever is greater (based on year or reported);
+career_length= max(career_ff_years, career_years); *career ff in more than 1 fd? could have miss-recalled length?;
+*years of ff considering BOTH CAREER and VOLUNTEER history based on years;
+If ever_career in ("Yes, I am currently a career firefighter" "Yes, I am a former career firefighter") and trfd_start_year ne . and career_start_year ne . then do;
+ff_start_year= min(career_start_year, trfd_start_year);
+If trfd_end_year = . or career_end_year= . then ff_length=(2019-ff_start_year);
+Else if trfd_end_year ne . and career_end_year ne . then ff_end_year= max(trfd_end_year, career_end_year);
+Else if trfd_end_year ne . and career_end_year ne . then ff_length=(ff_end_year-ff_start_year);
+End;
+*all FF years- for those who were both career and volunteer ff- whichever is larger (both, volunteer or career);
+If ever_career in ("Yes, I am currently a career firefighter" "Yes, I am a former career firefighter") then do;
+ff_years = max(volunteer_length, career_length, ff_length);
+End;
+
+If ff_years <6 then cat_ff_years="  0 to 5  ";
+Else if  ff_years >=6 and ff_years <21 then cat_ff_years =" 6 to 20"; 
+Else if ff_years >=21 and ff_years <31 then cat_ff_years ="21 to 30"; 
+Else if ff_years >=31 then cat_ff_years=">=31"; 
+
+If ever_career= "Yes, I am currently a career firefighter" or ever_career="Yes, I am a former career firefighter" then cat_ever_career="Career";
+Else if ever_career= "No" then cat_ever_career="Not career";
+
+/*Additional predictors: Age, currently employed, military service, race, marital status, education level, gender, income, BMI*/
+
+/* Age*/
+If age>18 and age<35 then cat_age=1;			/*18-35=1*/
+Else if age>35 and age<45 then cat_age=2;		/*36-44=2*/
+Else if age>45 and age<65 then cat_age=3;		/*45-64=3*/
+Else if age>=65 then cat_age=4;					/*65+=4*/
+Else if cat_age=" ";
+
+/*Currently employed: Format is fine*/
+
+/*Military service*/
+If military_service="No, <u>never</u> served in the U.S. Armed Forces" then cat_mil_serv=0; 							/*0=no service*/
+Else if military_service="No, never on active duty except for initial/basic <u>training</u>" then cat_mil_serv=0;		/*0=no service*/			
+Else if military_service="Yes, <u>now</u> on active duty" then cat_mil_serv=1;											/*1=service*/
+Else if military_service="Yes, on active duty in the <u>past</u>, but not now" then cat_mil_serv=1;						/*1=service*/
+Else cat_mil_service='.';																								/*Other*/
+
+/*Race*/
+IF race_white="Checked" and ethnicity= "No" then cat_race=1;												/*1=white*/
+Else if race_white= "Unchecked" or ethnicity= "Yes" or ethnicity= "Not sure/don't know" then cat_race=0;	/*0=non-white*/
+Else cat_race=.; 																							/*other*/
+
+/*Marital status*/
+If marital_status="Married" or marital_status="Member of an unmarried couple" then cat_marital=1;		/*1=married*/
+Else cat_marital=0;																						/*0=unmarried*/
+
+/*Education level: Format is fine*/
+/*Gender:Format is fine*/
+
+/*Income*/
+If income="Less than $25,000" or income="Less than $35,000" or income="Less than $50,000" or income="Less than $75,000" then cat_income="<$75,000";
+Else if income="$75,000 or more" then cat_income=">$75,000";
+Else cat_income=" ";
+
+/*BMI*/
+cat_BMI=round((c_weight/((c_height_in)**2))*703, 0.1);
+If cat_BMI < 25 then cat_1BMI = "   Normal";									/*normal=<25*/
+Else if cat_BMI >=25 and cat_BMI < 30 then cat_1BMI= "  Overweight";			/*overweight=25-30*/
+Else if cat_BMI >= 30 and cat_BMI <35 then cat_1BMI= " I Obese";				/*obese1=30-35*/
+Else if cat_BMI >= 35 then cat_1BMI= "II Obese";								/*obese2=35+*/
+Else cat_1BMI=" ";																/*other*/
+
+
+/*Table 1: Descriptive statistics using proc freq:*/
+/*Cigarettes*/
+proc freq data =B.capstone_native;
+tables  smoked_100_cigs smoke_current *cigarette_use  / nocol norow nopercent missing;
+run;
+proc sort data =B.capstone_native; 
+by cigarette_use;
+run;
+proc print data =B.capstone_native;
+var  ever_smoked smoked_100_cigs smoke_current cigarette_use;
+run;
+/*SLT*/
+proc freq data =B.capstone_native; 
+tables smokeless_tobacco *slt_use  / nocol norow nopercent missing;
+run;
+/*Alcohol*/
+proc univariate data =B.capstone_native;
+where alcohol_average<11;
+var alcohol_average;
+histogram alcohol_average;
+run; 
+proc print data =B.capstone_native;
+where  alcohol_numdrinks_c =.;
+var alcohol_numdrinks_c alcohol_average;
+run;
+proc freq data =B.capstone_native;
+tables  alcohol_numdrinks alcohol_numdrinks_c*heavy_drinking alcohol_numdrinks_c*drinks_per_week
+ heavy_drinking*drinks_per_week alcohol_numdrinks_c*alcohol_average_c
+ alcohol_average_c*alcohol_average/ nocol norow nopercent missing;
+run;
+/*FF Years*/
+proc freq data =B.capstone_native; 
+tables ff_years*cat_ff_years  / nocol norow nopercent missing;
+run;
+proc freq data =B.capstone_native; 
+tables ever_career*cat_ever_career/nocol norow nopercent missing;
+run;
+/*Age*/
+proc freq data =B.capstone_native;
+tables age*cat_age/ nocol norow nopercent missing;
+run;
+/*Employment status*/
+proc freq data =B.capstone_native; 
+tables curr_employed/ nocol norow nopercent missing;
+run;
+/*Mil service*/
+proc freq data =B.capstone_native;
+tables military_service*cat_mil_serv/ nocol norow nopercent missing;
+run;
+/*Race*/
+proc freq data =B.capstone_native;
+tables race_white ethnicity*cat_race/ nocol norow nopercent missing;
+run;
+/*Marital status*/
+proc freq data =B.capstone_native; 
+tables marital_status*cat_marital/ nocol norow nopercent missing;
+run;
+/*Education level: Format is fine*/
+proc freq data =B.capstone_native; 
+tables education/ nocol norow nopercent missing;
+run;
+/*Gender:Format is fine*/
+proc freq data =B.capstone_native; 
+tables gender/ nocol norow nopercent missing;
+run;
+/*Income*/
+proc freq data =B.capstone_native; 
+tables income*cat_income/ nocol norow nopercent missing;
+run;
+/*BMI*/
+proc freq data = B.capstone_native; 
+tables cat_BMI*cat_1BMI/ nocol norow nopercent missing;
+run;
+/*Final*/
+proc freq data =B.capstone_native;
+tables cat_ff_years cat_ever_career cigarette_use slt_use heavy_drinking cat_age curr_employed cat_mil_serv
+cat_race cat_marital education gender cat_income cat_1BMI;
+run;
+
+
+/*Table 2A: Bivariate analysis on cigarette use*/
+/*ever never cigarettes*/
+proc freq data =B.capstone_native;
+tables cigarette_use*cigarette_use_en/ nocol norow nopercent missing;
+run;
+/*cigarette*ever_career*/
+proc sort data=B.capstone_native;
+by cat_ever_career;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_ever_career;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*cat_ff_years*/
+proc sort data=B.capstone_native;
+by cat_ff_years;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_ff_years;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*slt_use*/
+proc sort data=B.capstone_native;
+by slt_use;
+run;
+proc surveyfreq data =B.capstone_native;
+by slt_use;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*heavy_drinking*/
+proc sort data=B.capstone_native;
+by heavy_drinking;
+run;
+proc surveyfreq data =B.capstone_native;
+by heavy_drinking;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*cat_age*/
+proc sort data=B.capstone_native;
+by cat_age;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_age;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*curr_employed*/
+proc sort data=B.capstone_native;
+by curr_employed;
+run;
+proc surveyfreq data =B.capstone_native;
+by curr_employed;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*cat_mil_serv*/
+proc sort data=B.capstone_native;
+by cat_mil_serv;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_mil_serv;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*cat_race*/
+proc sort data=B.capstone_native;
+by cat_race;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_race;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*cat_marital*/
+proc sort data=B.capstone_native;
+by cat_marital;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_marital;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*education*/
+proc sort data=B.capstone_native;
+by education;
+run;
+proc surveyfreq data =B.capstone_native;
+by education;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*gender*/
+proc sort data=B.capstone_native;
+by gender;
+run;
+proc surveyfreq data =B.capstone_native;
+by gender;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*cat_income*/
+proc sort data=B.capstone_native;
+by cat_income;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_income;
+tables  cigarette_use_en/ cl;
+run;
+/*cigarette*cat_1BMI*/
+proc sort data=B.capstone_native;
+by cat_1BMI;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_1BMI;
+tables  cigarette_use_en/ cl;
+run;
+
+
+
+/*Table 2B: Bivariate analysis on SLT use*/
+/*SLT*ever_career*/
+proc sort data=B.capstone_native;
+by cat_ever_career;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_ever_career;
+tables  slt_use/ cl;
+run;
+/*SLT*cat_ff_years*/
+proc sort data=B.capstone_native;
+by cat_ff_years;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_ff_years;
+tables  slt_use/ cl;
+run;
+/*SLT*cigarette_use_en*/
+proc sort data=B.capstone_native;
+by cigarette_use_en;
+run;
+proc surveyfreq data =B.capstone_native;
+by cigarette_use_en;
+tables  slt_use/ cl;
+run;
+/*SLT*heavy_drinking*/
+proc sort data=B.capstone_native;
+by heavy_drinking;
+run;
+proc surveyfreq data =B.capstone_native;
+by heavy_drinking;
+tables  slt_use/ cl;
+run;
+/*SLT*cat_age*/
+proc sort data=B.capstone_native;
+by cat_age;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_age;
+tables  slt_use/ cl;
+run;
+/*SLT*curr_employed*/
+proc sort data=B.capstone_native;
+by curr_employed;
+run;
+proc surveyfreq data =B.capstone_native;
+by curr_employed;
+tables  slt_use/ cl;
+run;
+/*SLT*cat_mil_serv*/
+proc sort data=B.capstone_native;
+by cat_mil_serv;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_mil_serv;
+tables  slt_use/ cl;
+run;
+/*SLT*cat_race*/
+proc sort data=B.capstone_native;
+by cat_race;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_race;
+tables  slt_use/ cl;
+run;
+/*SLT*cat_marital*/
+proc sort data=B.capstone_native;
+by cat_marital;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_marital;
+tables  slt_use/ cl;
+run;
+/*SLT*education*/
+proc sort data=B.capstone_native;
+by education;
+run;
+proc surveyfreq data =B.capstone_native;
+by education;
+tables  slt_use/ cl;
+run;
+/*SLT*gender*/
+proc sort data=B.capstone_native;
+by gender;
+run;
+proc surveyfreq data =B.capstone_native;
+by gender;
+tables  slt_use/ cl;
+run;
+/*SLT*cat_income*/
+proc sort data=B.capstone_native;
+by cat_income;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_income;
+tables  slt_use/ cl;
+run;
+/*SLT*cat_1BMI*/
+proc sort data=B.capstone_native;
+by cat_1BMI;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_1BMI;
+tables  slt_use/ cl;
+run;
+
+
+/*Table 2C: Bivariate analysis on heavy drinking*/
+/*heavy drinking*ever_career*/
+proc sort data=B.capstone_native;
+by cat_ever_career;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_ever_career;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*cat_ff_years*/
+proc sort data=B.capstone_native;
+by cat_ff_years;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_ff_years;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*cigarette_use_en*/
+proc sort data=B.capstone_native;
+by cigarette_use_en;
+run;
+proc surveyfreq data =B.capstone_native;
+by cigarette_use_en;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*slt_use*/
+proc sort data=B.capstone_native;
+by slt_use;
+run;
+proc surveyfreq data =B.capstone_native;
+by slt_use;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*cat_age*/
+proc sort data=B.capstone_native;
+by cat_age;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_age;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*curr_employed*/
+proc sort data=B.capstone_native;
+by curr_employed;
+run;
+proc surveyfreq data =B.capstone_native;
+by curr_employed;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*cat_mil_serv*/
+proc sort data=B.capstone_native;
+by cat_mil_serv;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_mil_serv;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*cat_race*/
+proc sort data=B.capstone_native;
+by cat_race;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_race;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*cat_marital*/
+proc sort data=B.capstone_native;
+by cat_marital;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_marital;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*education*/
+proc sort data=B.capstone_native;
+by education;
+run;
+proc surveyfreq data =B.capstone_native;
+by education;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*gender*/
+proc sort data=B.capstone_native;
+by gender;
+run;
+proc surveyfreq data =B.capstone_native;
+by gender;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*cat_income*/
+proc sort data=B.capstone_native;
+by cat_income;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_income;
+tables  heavy_drinking/ cl;
+run;
+/*heavy drinking*cat_1BMI*/
+proc sort data=B.capstone_native;
+by cat_1BMI;
+run;
+proc surveyfreq data =B.capstone_native;
+by cat_1BMI;
+tables  heavy_drinking/ cl;
+run;
+
+
+
+*/Table 3;
+proc logistic data=B.capstone_native;
+class cat_mil_serv (ref='0') cat_marital (ref='1') education (ref='Grade 12 or GED (High school graduate)')/ param=ref;
+model cigarette_use_en (event='Ever')= ff_years age cat_mil_serv cat_marital education;
+contrast "10 year change in FF years" ff_years 10 / estimate=both; *estimate=both gives the log-odds and odds, CIs for both will be included;
+contrast "10 year change in age" age 10 / estimate=both;
+run;
+
+/*Crude logistic models*/
+proc logistic data=B.capstone_native;
+model cigarette_use_en (event='Ever')= ff_years ;
+contrast "10 year change in FF years" ff_years 10 / estimate=both; *estimate=both gives the log-odds and odds, CIs for both will be included;
+run;
+
+proc logistic data=B.capstone_native;
+model cigarette_use_en (event='Ever')= age;
+run;
+proc logistic data=B.capstone_native;
+class cat_mil_serv (ref='0') / param=ref;
+model cigarette_use_en (event='Ever')=cat_mil_serv;
+run;
+proc logistic data=B.capstone_native;
+class education (ref='Grade 12 or GED (High school graduate)') / param=ref;
+model cigarette_use_en (event='Ever')= education;
+run;
+proc logistic data=B.capstone_native;
+class cat_marital (ref='1')/ param=ref;
+model cigarette_use_en (event='Ever')= cat_marital;
+run;
+
+
+
+proc logistic data=B.capstone_native;
+class cat_mil_serv (ref='0') cat_marital (ref='1') education (ref='Grade 12 or GED (High school graduate)')/ param=ref;
+model cigarette_use_en (event='Ever')= ff_years;
+contrast "10 year change in FF years" ff_years 10 / estimate=both; *estimate=both gives the log-odds and odds, CIs for both will be included;
+contrast "10 year change in age" age 10 / estimate=both;
+run;
+
+proc logistic data=B.capstone_native;
+class cat_mil_serv (ref='0') cat_marital (ref='1') education (ref='Grade 12 or GED (High school graduate)')/ param=ref;
+model cigarette_use_en (event='Ever')= ff_years  ;
+contrast "10 year change in FF years" ff_years 10 / estimate=both;  
+run;
