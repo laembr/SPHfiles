@@ -1,0 +1,199 @@
+/*FINAL REGRESSION PROJECT BY LAUREN BROWN, (ALMOST) MPH. PROJECT DUE 12/8/2020.*/
+
+LIBNAME a '/home/u45144537/Lauren Brown- Poor Mans Save Folder/Linear Regression';
+OPTIONS FMTSEARCH=(a.p5format);
+PROC CONTENTS DATA=a.p5;
+RUN;
+PROC PRINT DATA=a.p5 (OBS=10);
+RUN; 
+
+/*1)Exposure is Veteran status(Veteran3)*/
+/*2)Outcome is depression (ADDEPEV2)*/
+/*Hypothesis: There is a significant association between military service and depression among BRFSS 2018 respondents*/
+/*3)PMID:25145943*/
+/*4) 5 additional explanatory variables include age(AGE), average hours of sleep (SLEPTIM1),
+whether or not someone exercised in the past 30 days (EXERANY2), education level (EDUCA), and general health (GENHLTH)*/
+
+/*REFERENCE CHART:
+Outcome variable: 
+•	Depression (no=0, yes=1)
+Exposure: 
+•	Military (no=0, yes=1)
+•	Age group (35-44=1, 45-54=2, 55-64=3)
+•	Sleep (continuous)
+•	Exercise (no=0, yes=1)
+•	Education level (only grades 1-8=1, grades 9-12 or GED=2, some college=3, college graduate=4)
+•	Health (poor health=1, fair health=2, excellent health=3)*/
+
+
+/*Create a modified dataset: Final sample size:n=5000 */
+DATA AA;
+SET a.p5;
+IF ADDEPEV2 IN (1,2); 
+run;
+
+DATA AA1;
+SET AA;
+/*Main exposure: Military Service*/
+if VETERAN3=1 then Military=1;   /*Yes*/
+else if VETERAN3=2 then Military=0;  /*No*/
+else Military=.;                 /*Missing*/
+/*Age groups*/
+if AGE=3 then Age_group=1; /*35-44*/
+else if AGE=4 then Age_group=2; /*45-54*/
+else if AGE=5 then Age_group=3; /*55-64*/
+else Age_group=.;
+/*Sleep time-CONTINUOUS*/
+RENAME SLEPTIM1=Sleep;
+/*Exercise*/
+if EXERANY2=1 then Exercise=1;   /*Yes*/
+else if EXERANY2=2 then Exercise=0;  /*No*/
+else Exercise=.;
+/*Education*/
+if EDUCA=1 then Education_level=0;   /*Never attended school or only kindergarten*/
+else if EDUCA=2 then Education_level=1;  /*Grades 1-8*/
+else if EDUCA IN (3,4) then Education_level=2;  /*Grades 9-12 or GED*/
+else if EDUCA=5 then Education_level=3;  /*Some college*/
+else if EDUCA=6 then Education_level=4; /*College graduate*/
+/*General Health*/
+if GENHLTH IN (1,2) then Health=3;   /*Excellent health*/
+else if GENHLTH IN (3,4) then Health=2;  /*Fair or good health*/
+else if GENHLTH IN (5) then Health=1;  /*Poor health*/
+else Health=.;
+/*Main outcome: depression*/
+if ADDEPEV2=1 then Depression=1;   /*Yes*/
+else if ADDEPEV2=2 then Depression=0;  /*No*/
+else Depression=.;                 /*Missing*/
+RUN;
+
+PROC PRINT DATA=AA1 (OBS=10);
+VAR Age_group Sleep Exercise Education_level Health;
+RUN;
+PROC FREQ Data=AA1;
+RUN;
+
+/*5) Perform univariate analysis for the explanatory variables*/;
+
+/*2x2 tables*/
+PROC FREQ DATA=AA1;
+TABLES Depression*Military
+	Depression*Age_group 
+	Depression*Sleep 
+	Depression*Exercise 
+	Depression*Education_level 
+	Depression*Health;
+RUN;  
+
+/*The only continuous data in the set is sleep, so a proc univariate was only run on sleep*/
+PROC NPAR1WAY DATA=AA1;
+CLASS Depression;
+VAR Sleep;
+RUN; 
+ 
+PROC UNIVARIATE DATA=AA1 PLOT;
+VAR Sleep;
+RUN;
+
+/*6) PERFORM MULTIPLE LOGISTIC REGRESSION MODEL ANALYSIS.*/;
+PROC LOGISTIC DATA=AA1;
+CLASS Military (Ref='1')/param=ref;
+MODEL Depression(EVENT="1") = Military;
+RUN;
+PROC LOGISTIC DATA=AA1;
+CLASS Age_group(Ref='1')/param=ref;
+MODEL Depression(EVENT="1") = Age_group;
+RUN;
+PROC LOGISTIC DATA=AA1;;
+CLASS Sleep(Ref='8')/param=ref;
+MODEL Depression(EVENT="1") =Sleep;
+RUN;
+Proc Logistic Data=AA1;
+CLASS Exercise(Ref='1')/param=ref;
+MODEL Depression(EVENT="1")= Exercise;
+RUN;
+PROC LOGISTIC DATA=AA1;
+CLASS Education_level (Ref='4')/param=ref;
+MODEL Depression(EVENT="1")= Education_level;
+RUN;
+PROC LOGISTIC DATA=AA1;
+CLASS Health (Ref='3')/param=ref;
+MODEL Depression(EVENT="1") = Health;
+RUN;
+
+/*SELECTION MODEL: IF USING ALL SIX VARIABLES, THIS IS THE ORDER OF GREATEST EFFECT: 
+Military Age_group Sleep Exercise Education_level Health*/;
+PROC LOGISTIC DATA= AA1;
+MODEL Depression (EVENT='1') = Military Age_group Sleep Exercise Education_level Health/ SELECTION= SCORE;
+TITLE 'Predict Depression: SELECTION=SCORE';
+RUN;
+
+/*I will use the stepwise selection process for the table.*/
+*Backward selection: STEP 1: No (additional) effects met the 0.05 significance level for removal from the model.;
+PROC logistic DATA=AA1;
+CLASS Military (Ref='1') Sleep (Ref='8') Age_group (Ref='1') Exercise (Ref= '1') Education_level(Ref='4') Health (Ref='3');
+MODEL Depression = Military Sleep Age_group Exercise Education_level Health/ SELECTION=BACKWARD;
+TITLE 'BACKWARDS ELIMINATION';
+RUN;
+*Forward selection: Step 6: All effects have been entered into the model, none removed;
+PROC LOGISTIC DATA=AA1;
+CLASS Military (Ref='1') Sleep (Ref='8') Age_group (Ref='1') Exercise (Ref= '1') Education_level(Ref='4') Health (Ref='3');
+MODEL Depression = Military Sleep Age_group Exercise Education_level Health/ SELECTION=FORWARD;
+TITLE 'FORWARDS SELECTION';
+RUN;
+*Stepwise selection: Step 6: No model effects are removed, all contribute to the model, none removed;
+PROC LOGISTIC DATA=AA1;
+CLASS Military (Ref='1') Sleep (Ref='8') Age_group (Ref='1') Exercise (Ref= '1') Education_level(Ref='4') Health (Ref='3');
+MODEL Depression = Military Sleep Age_group Exercise Education_level Health/ SELECTION=STEPWISE;
+TITLE 'STEPWISE SELECTION';
+RUN; 
+
+/*COLLINEARITY*/
+PROC REG DATA=AA1;
+MODEL Depression = Military Age_group Sleep Exercise Education_level Health / VIF COLLIN;
+RUN;
+
+/*Final Model and Adjusted OR*/
+PROC LOGISTIC DATA=AA1;
+CLASS Military (Ref='1') Sleep (Ref='8') Age_group (Ref='1') Exercise (Ref='1') Education_level(Ref='4') Health (Ref='3');
+MODEL Depression (EVENT='1') = Military Sleep Age_group Exercise Education_level Health;
+RUN;
+
+/*R-square and adjusted R-square*/
+PROC LOGISTIC DATA=AA1;
+CLASS Military (Ref='1') Sleep (Ref='8') Age_group (Ref='1') Exercise (Ref='1') Education_level(Ref='4') Health (Ref='3');
+MODEL Depression(EVENT='1') = Military Sleep Exercise Education_level Health/ RSQUARE;
+TITLE 'DEPRESSION: DEVIANCE AND PEARSON';
+RUN;
+
+/*7) Model Fit: Hosmer-Lemeshow Goodness-of-Fit Test*/
+PROC LOGISTIC DATA=AA1;
+CLASS Military (Ref='1') Sleep (Ref='8') Age_group (Ref='1') Exercise (Ref='1') Education_level(Ref='4') Health (Ref='3');
+MODEL Depression(EVENT='1') = Military Age_group Sleep Exercise Education_level Health/ LACKFIT;
+RUN;
+
+/*ROC curve*/
+PROC LOGISTIC DATA=AA1 PLOTS(ONLY)=ROC;
+CLASS Military (Ref='1');
+MODEL Depression(EVENT='1') = Military;
+TITLE 'DEPRESSION: ROC FOR MILITARY';
+RUN;
+
+/*Adjusted ROC curve*/
+PROC LOGISTIC DATA=AA1 PLOTS(ONLY)=ROC;
+CLASS Military (Ref='1') Sleep (Ref='8') Age_group (Ref='1') Exercise (Ref='1') Education_level(Ref='4') Health (Ref='3');
+MODEL Depression(EVENT='1') = Military Age_group Sleep Exercise Education_level Health;
+TITLE 'Depression: ROC from Military Age_group Sleep Exercise Education_level Health';
+RUN;
+
+/*Diagnostics*/
+PROC LOGISTIC DATA=AA1 (OBS=50);
+MODEL Depression (EVENT='1') = Military Age_group Sleep Exercise Education_level Health/ INFLUENCE;
+TITLE 'Diagnostics';
+RUN;
+
+
+
+
+
+
+ 
